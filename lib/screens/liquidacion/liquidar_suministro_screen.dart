@@ -77,7 +77,7 @@ class _LiquidarSuministroScreenState extends State<LiquidarSuministroScreen> {
         _moControllers[p.idManoDeObra] = TextEditingController();
       }
       for (final m in tipo.materiales) {
-        _matControllers[m.idMaterial] = TextEditingController(text: m.cantidad);
+        _matControllers[m.idMaterial] = TextEditingController();
       }
     }
     setState(() => _tipoSeleccionado = tipo);

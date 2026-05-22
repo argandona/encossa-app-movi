@@ -119,13 +119,11 @@ class MaterialTipoTrabajo {
   final int    idMaterial;
   final String matricula;
   final String descripcion;
-  final String cantidad;
 
   const MaterialTipoTrabajo({
     required this.idMaterial,
     required this.matricula,
     required this.descripcion,
-    required this.cantidad,
   });
 
   factory MaterialTipoTrabajo.fromJson(Map<String, dynamic> j) =>
@@ -133,6 +131,5 @@ class MaterialTipoTrabajo {
         idMaterial:  j['id_material'] as int,
         matricula:   j['matricula']   as String? ?? '',
         descripcion: j['descripcion'] as String? ?? '',
-        cantidad:    j['cantidad']    as String? ?? '0.00',
       );
 }
