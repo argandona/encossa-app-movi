@@ -1,3 +1,12 @@
+class RolId {
+  static const int superAdmin        = 1;
+  static const int adminEmpresa      = 2;
+  static const int encargado         = 3;
+  static const int capataz           = 4;
+  static const int liquidador        = 5;
+  static const int encargadoAlmacen  = 6;
+}
+
 class Usuario {
   final int    idUsuario;
   final String nombre;
@@ -27,13 +36,13 @@ class Usuario {
     empresa:   j['empresa'],
   );
 
-  bool get puedeHacerPedido       => rolId == 3 || rolId == 4;
-  bool get puedeHacerDevolucion   => rolId == 3 || rolId == 4;
-  bool get puedeVerInventario     => rolId == 5 || rolId == 6;
-  bool get puedeHacerInventario   => rolId == 6;
-  bool get puedeAprobarPedido     => rolId == 6 || rolId == 1;
-  bool get puedeAprobarDevolucion => rolId == 6 || rolId == 1;
-  bool get puedeVerSaldosPropios  => rolId == 3 || rolId == 4;
-  bool get puedeVerSaldosTodos    => rolId == 6 || rolId == 1;
-  bool get puedeLiquidar          => rolId == 3 || rolId == 5; // encargado o liquidador
+  bool get puedeHacerPedido       => rolId == RolId.encargado      || rolId == RolId.capataz;
+  bool get puedeHacerDevolucion   => rolId == RolId.encargado      || rolId == RolId.capataz;
+  bool get puedeVerInventario     => rolId == RolId.liquidador      || rolId == RolId.encargadoAlmacen;
+  bool get puedeHacerInventario   => rolId == RolId.encargadoAlmacen;
+  bool get puedeAprobarPedido     => rolId == RolId.encargadoAlmacen || rolId == RolId.superAdmin;
+  bool get puedeAprobarDevolucion => rolId == RolId.encargadoAlmacen || rolId == RolId.superAdmin;
+  bool get puedeVerSaldosPropios  => rolId == RolId.encargado      || rolId == RolId.capataz;
+  bool get puedeVerSaldosTodos    => rolId == RolId.encargadoAlmacen || rolId == RolId.superAdmin;
+  bool get puedeLiquidar          => rolId == RolId.encargado      || rolId == RolId.liquidador;
 }
