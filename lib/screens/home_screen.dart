@@ -10,6 +10,7 @@ import 'devoluciones/aprobacion_devoluciones_screen.dart';
 import 'inventarios/inventarios_screen.dart';
 import 'saldos/saldos_screen.dart';
 import 'liquidacion/liquidacion_screen.dart';
+import 'dibujo/dibujo_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -90,6 +91,12 @@ class _HomeScreenState extends State<HomeScreen> {
         'icono':  Icons.inventory_2_outlined,
         'color':  Colors.green,
         'screen': const InventariosScreen(),
+      },
+      if (usuario.puedeDibujar) {
+        'titulo': 'Dibujo',
+        'icono':  Icons.brush_outlined,
+        'color':  Colors.purple,
+        'screen': const DibujoScreen(),
       },
     ];
 

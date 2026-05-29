@@ -45,4 +45,5 @@ class Usuario {
   bool get puedeVerSaldosPropios  => rolId == RolId.encargado      || rolId == RolId.capataz;
   bool get puedeVerSaldosTodos    => rolId == RolId.encargadoAlmacen || rolId == RolId.superAdmin;
   bool get puedeLiquidar          => rolId == RolId.encargado      || rolId == RolId.liquidador;
+  bool get puedeDibujar           => rolId == RolId.encargado;
 }
