@@ -14,11 +14,11 @@ class ItemPaleta {
 }
 
 const List<ItemPaleta> kPaleta = [
-  ItemPaleta(id: 'casa',    path: 'assets/svg/casa.svg',    nombre: 'Casa'),
-  ItemPaleta(id: 'arbol',   path: 'assets/svg/arbol.svg',   nombre: 'Árbol'),
-  ItemPaleta(id: 'auto',    path: 'assets/svg/auto.svg',    nombre: 'Auto'),
-  ItemPaleta(id: 'persona', path: 'assets/svg/persona.svg', nombre: 'Persona'),
-  ItemPaleta(id: 'sol',     path: 'assets/svg/sol.svg',     nombre: 'Sol'),
+  ItemPaleta(id: 'retenida',       path: 'assets/svg/Retenida.svg',       nombre: 'Retenida'),
+  ItemPaleta(id: 'caais2x16',      path: 'assets/svg/Caais 2x16.svg',     nombre: 'Caais 2x16'),
+  ItemPaleta(id: 'mensula_simple', path: 'assets/svg/Mensula_simple.svg', nombre: 'Ménsula simple'),
+  ItemPaleta(id: 'mensula_doble',  path: 'assets/svg/mensula_doble.svg',  nombre: 'Ménsula doble'),
+  ItemPaleta(id: 'poste',          path: 'assets/svg/Poste.svg',          nombre: 'Poste'),
 ];
 
 /// Retorna el path del asset para un assetId dado.

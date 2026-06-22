@@ -6,6 +6,10 @@ import '../models/pedido.dart';
 import '../models/devolucion.dart';
 import '../models/inventario.dart';
 import '../models/sst.dart';
+import '../models/elemento_canvas.dart';
+export '../models/sst.dart'
+    show SemanaTrabajo, DiaTrabajo, SuministroSemana,
+         SemanaPlanos, DiaPlanos, SstPlanoResumen;
 import 'constants.dart';
 
 class ApiException implements Exception {
@@ -449,25 +453,86 @@ class ApiService {
     return List<Map<String, dynamic>>.from(items as List);
   }
 
+  // ── Semana de trabajo (suministros de Render filtrados por usuario/semana) ──
+  Future<SemanaTrabajo> getSemanaTrabajoLiquidacion(int usuarioId) async {
+    final resp = await _get(
+      _uri('liquidaciones/semana_trabajo/', {'usuario': usuarioId}),
+    );
+    return SemanaTrabajo.fromJson(_parse(resp));
+  }
+
   Future<void> crearLiquidacion({
-    required int suministroId,
-    required int usuarioId,
-    required int tipoTrabajoId,
+    // Suministro local (Control_almacen)
+    int?   suministroId,
+    // Suministro externo (Render)
+    String suministroExterno = '',
+    String sstExterno        = '',
+    required int    usuarioId,
+    required int    tipoTrabajoId,
     required String observacion,
     required List<Map<String, dynamic>> partidas,
     List<Map<String, dynamic>> materiales = const [],
+    // Estado a fijar en Render: 'EJECUTADO' o 'DEVUELTO'
+    String estadoSuministro = 'EJECUTADO',
+    // Motivo (obligatorio si DEVUELTO) → observacion_contratista en Render
+    String motivo           = '',
+    // id del suministro en Render (para reflejar estado/observación allá)
+    int?   suministroRenderId,
   }) async {
-    final resp = await _post(
-      _uri('liquidaciones/'),
-      body: jsonEncode({
-        'suministro':   suministroId,
-        'usuario':      usuarioId,
-        'tipo_trabajo': tipoTrabajoId,
-        'observacion':  observacion,
-        'partidas':     partidas,
-        'materiales':   materiales,
-      }),
+    final body = <String, dynamic>{
+      'usuario':           usuarioId,
+      'tipo_trabajo':      tipoTrabajoId,
+      'observacion':       observacion,
+      'partidas':          partidas,
+      'materiales':        materiales,
+      'estado_suministro': estadoSuministro,
+      'motivo':            motivo,
+    };
+    if (suministroId != null)          body['suministro']           = suministroId;
+    if (suministroExterno.isNotEmpty)  body['suministro_externo']   = suministroExterno;
+    if (sstExterno.isNotEmpty)         body['sst_externo']          = sstExterno;
+    if (suministroRenderId != null)    body['suministro_render_id'] = suministroRenderId;
+
+    final resp = await _post(_uri('liquidaciones/'), body: jsonEncode(body));
+    _parse(resp);
+  }
+
+  // ── Planos por SST ──────────────────────────────────────────────────────
+  /// SSTs programados de la semana, agrupados por fecha, con flag tiene_plano.
+  Future<SemanaPlanos> getSemanaPlanos(int usuarioId) async {
+    final resp = await _get(
+      _uri('planos/semana_sst/', {'usuario': usuarioId}),
     );
+    return SemanaPlanos.fromJson(_parse(resp));
+  }
+
+  /// Elementos del plano de un SST (lista vacía si aún no tiene plano).
+  Future<List<ElementoCanvas>> getPlano(String sstCodigo) async {
+    final resp = await _get(_uri('planos/', {'sst_codigo': sstCodigo}));
+    final data = _parse(resp);
+    final lista = data is Map ? (data['results'] as List? ?? []) : (data as List? ?? []);
+    if (lista.isEmpty) return [];
+    final elementos = (lista.first['elementos'] as List? ?? []);
+    var i = 0;
+    return elementos
+        .map((e) => ElementoCanvas.fromJson(
+              e as Map<String, dynamic>,
+              id: 'plano_${i++}_${e['assetId']}',
+            ))
+        .toList();
+  }
+
+  /// Crea o actualiza (upsert) el plano de un SST.
+  Future<void> guardarPlano(
+    String sstCodigo,
+    int usuarioId,
+    List<ElementoCanvas> elementos,
+  ) async {
+    final resp = await _post(_uri('planos/'), body: jsonEncode({
+      'sst_codigo': sstCodigo,
+      'usuario':    usuarioId,
+      'elementos':  elementos.map((e) => e.toJson()).toList(),
+    }));
     _parse(resp);
   }
 

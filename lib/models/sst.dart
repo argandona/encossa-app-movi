@@ -64,6 +64,127 @@ class SuministroSst {
   );
 }
 
+// ── Modelos para el endpoint planos/semana_sst ────────────────────────────────
+
+class SstPlanoResumen {
+  final String sstCodigo;
+  final String distrito;
+  final String actividad;
+  final bool   tienePlano;
+
+  const SstPlanoResumen({
+    required this.sstCodigo,
+    required this.distrito,
+    required this.actividad,
+    required this.tienePlano,
+  });
+
+  factory SstPlanoResumen.fromJson(Map<String, dynamic> j) => SstPlanoResumen(
+    sstCodigo:  j['sst_codigo'] as String? ?? '',
+    distrito:   j['distrito']   as String? ?? '',
+    actividad:  j['actividad']  as String? ?? '',
+    tienePlano: j['tiene_plano'] as bool? ?? false,
+  );
+}
+
+class DiaPlanos {
+  final String fecha;
+  final List<SstPlanoResumen> ssts;
+  const DiaPlanos({required this.fecha, required this.ssts});
+
+  factory DiaPlanos.fromJson(Map<String, dynamic> j) => DiaPlanos(
+    fecha: j['fecha'] as String? ?? '',
+    ssts: (j['ssts'] as List? ?? [])
+        .map((s) => SstPlanoResumen.fromJson(s as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+class SemanaPlanos {
+  final String desde;
+  final String hasta;
+  final List<DiaPlanos> dias;
+  const SemanaPlanos({required this.desde, required this.hasta, required this.dias});
+
+  factory SemanaPlanos.fromJson(Map<String, dynamic> j) => SemanaPlanos(
+    desde: (j['semana'] as Map<String, dynamic>?)?['desde'] as String? ?? '',
+    hasta: (j['semana'] as Map<String, dynamic>?)?['hasta'] as String? ?? '',
+    dias: (j['dias'] as List? ?? [])
+        .map((d) => DiaPlanos.fromJson(d as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+
+// ── Modelos para el endpoint semana_trabajo ───────────────────────────────────
+
+class SuministroSemana {
+  final int    idExterno;
+  final String sstCodigo;
+  final String suministro;
+  final String direccion;
+  final String distrito;
+  final String actividad;
+  final String? horaInicio;
+  final String? horaFin;
+  final List<TipoTrabajoConPartidas> tiposTrabajo;
+
+  const SuministroSemana({
+    required this.idExterno,
+    required this.sstCodigo,
+    required this.suministro,
+    required this.direccion,
+    required this.distrito,
+    required this.actividad,
+    this.horaInicio,
+    this.horaFin,
+    required this.tiposTrabajo,
+  });
+
+  factory SuministroSemana.fromJson(Map<String, dynamic> j) => SuministroSemana(
+    idExterno:   j['id'] as int,
+    sstCodigo:   j['sst_codigo'] as String? ?? '',
+    suministro:  j['suministro'] as String? ?? '',
+    direccion:   j['direccion'] as String? ?? '',
+    distrito:    (j['distrito'] as Map<String, dynamic>?)?['nombre_distrito'] as String? ?? '',
+    actividad:   (j['actividad'] as Map<String, dynamic>?)?['nombre_actividad'] as String? ?? '',
+    horaInicio:  j['hora_inicio_programada'] as String?,
+    horaFin:     j['hora_fin_programada'] as String?,
+    tiposTrabajo: (j['tipos_trabajo_disponibles'] as List? ?? [])
+        .map((t) => TipoTrabajoConPartidas.fromJson(t as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+class DiaTrabajo {
+  final String fecha;
+  final List<SuministroSemana> suministros;
+  const DiaTrabajo({required this.fecha, required this.suministros});
+
+  factory DiaTrabajo.fromJson(Map<String, dynamic> j) => DiaTrabajo(
+    fecha: j['fecha'] as String? ?? '',
+    suministros: (j['suministros'] as List? ?? [])
+        .map((s) => SuministroSemana.fromJson(s as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+class SemanaTrabajo {
+  final String desde;
+  final String hasta;
+  final List<DiaTrabajo> dias;
+  const SemanaTrabajo({required this.desde, required this.hasta, required this.dias});
+
+  factory SemanaTrabajo.fromJson(Map<String, dynamic> j) => SemanaTrabajo(
+    desde: (j['semana'] as Map<String, dynamic>?)?['desde'] as String? ?? '',
+    hasta: (j['semana'] as Map<String, dynamic>?)?['hasta'] as String? ?? '',
+    dias: (j['dias'] as List? ?? [])
+        .map((d) => DiaTrabajo.fromJson(d as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+
 class TipoTrabajoConPartidas {
   final int    idTipoTrabajo;
   final String nombre;

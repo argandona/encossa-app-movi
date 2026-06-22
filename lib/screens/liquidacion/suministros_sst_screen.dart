@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api_service.dart';
 import '../../models/sst.dart';
-import 'liquidar_suministro_screen.dart';
 
 class SuministrosSstScreen extends StatefulWidget {
   final Sst sst;
@@ -84,15 +83,7 @@ class _SuministrosSstScreenState extends State<SuministrosSstScreen> {
                           final s = _suministros![i];
                           return _SuministroCard(
                             suministro: s,
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => LiquidarSuministroScreen(
-                                  suministro: s,
-                                  sst: sst,
-                                ),
-                              ),
-                            ),
+                            onTap: null,
                           );
                         },
                       ),
@@ -103,7 +94,7 @@ class _SuministrosSstScreenState extends State<SuministrosSstScreen> {
 
 class _SuministroCard extends StatelessWidget {
   final SuministroSst  suministro;
-  final VoidCallback   onTap;
+  final VoidCallback?  onTap;
 
   const _SuministroCard({required this.suministro, required this.onTap});
 

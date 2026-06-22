@@ -2,20 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_service.dart';
 import '../../core/auth_provider.dart';
-import '../../models/sst.dart';
-import 'liquidar_suministro_screen.dart';
+import '../dibujo/dibujo_screen.dart';
 
-class LiquidacionScreen extends StatefulWidget {
-  const LiquidacionScreen({super.key});
+/// Lista los SSTs programados de la semana (datos de Render) agrupados por
+/// fecha de programación. Al tocar un SST abre su plano (lienzo) para editar.
+class PlanosSstScreen extends StatefulWidget {
+  const PlanosSstScreen({super.key});
 
   @override
-  State<LiquidacionScreen> createState() => _LiquidacionScreenState();
+  State<PlanosSstScreen> createState() => _PlanosSstScreenState();
 }
 
-class _LiquidacionScreenState extends State<LiquidacionScreen> {
-  SemanaTrabajo? _semana;
-  String?        _error;
-  bool           _loading = true;
+class _PlanosSstScreenState extends State<PlanosSstScreen> {
+  SemanaPlanos? _semana;
+  String?       _error;
+  bool          _loading = true;
 
   @override
   void initState() {
@@ -27,7 +28,7 @@ class _LiquidacionScreenState extends State<LiquidacionScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final usuario = context.read<AuthProvider>().usuario!;
-      final semana  = await ApiService().getSemanaTrabajoLiquidacion(usuario.idUsuario);
+      final semana  = await ApiService().getSemanaPlanos(usuario.idUsuario);
       if (mounted) setState(() { _semana = semana; _loading = false; });
     } catch (e) {
       if (mounted) setState(() {
@@ -37,13 +38,26 @@ class _LiquidacionScreenState extends State<LiquidacionScreen> {
     }
   }
 
+  Future<void> _abrirPlano(SstPlanoResumen sst) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DibujoScreen(
+          sstCodigo: sst.sstCodigo,
+          sstLabel:  'SST ${sst.sstCodigo}',
+        ),
+      ),
+    );
+    _cargar(); // refrescar badges al volver
+  }
+
   String _formatearFecha(String fecha) {
     if (fecha.isEmpty) return '';
     try {
-      final dt     = DateTime.parse(fecha);
-      const dias   = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-      const meses  = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+      final dt    = DateTime.parse(fecha);
+      const dias  = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+      const meses = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
       return '${dias[dt.weekday - 1]} ${dt.day} de ${meses[dt.month]}';
     } catch (_) {
       return fecha;
@@ -62,7 +76,7 @@ class _LiquidacionScreenState extends State<LiquidacionScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A237E),
         foregroundColor: Colors.white,
-        title: const Text('Liquidación'),
+        title: const Text('Planos'),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _cargar),
         ],
@@ -78,11 +92,10 @@ class _LiquidacionScreenState extends State<LiquidacionScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.check_circle_outline,
-                                size: 64, color: Colors.green),
+                            Icon(Icons.map_outlined, size: 64, color: Colors.green),
                             SizedBox(height: 16),
                             Text(
-                              'Sin suministros pendientes esta semana.',
+                              'Sin SSTs programados esta semana.',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 15, color: Colors.black54),
                             ),
@@ -95,23 +108,17 @@ class _LiquidacionScreenState extends State<LiquidacionScreen> {
                       child: ListView(
                         padding: const EdgeInsets.all(12),
                         children: [
-                          // ── Header semana ──────────────────────────────────
                           _SemanaHeader(semana: _semana!),
                           const SizedBox(height: 12),
-
-                          // ── Días con suministros ───────────────────────────
                           for (final dia in _semana!.dias) ...[
                             _DiaHeader(
-                              label:  _formatearFecha(dia.fecha),
-                              esHoy:  _esHoy(dia.fecha),
-                              count:  dia.suministros.length,
+                              label: _formatearFecha(dia.fecha),
+                              esHoy: _esHoy(dia.fecha),
+                              count: dia.ssts.length,
                             ),
                             const SizedBox(height: 6),
-                            for (final s in dia.suministros)
-                              _SuministroCard(
-                                suministro: s,
-                                onLiquidado: _cargar,
-                              ),
+                            for (final sst in dia.ssts)
+                              _SstCard(sst: sst, onTap: () => _abrirPlano(sst)),
                             const SizedBox(height: 12),
                           ],
                         ],
@@ -123,7 +130,7 @@ class _LiquidacionScreenState extends State<LiquidacionScreen> {
 
 // ── Header de la semana ───────────────────────────────────────────────────────
 class _SemanaHeader extends StatelessWidget {
-  final SemanaTrabajo semana;
+  final SemanaPlanos semana;
   const _SemanaHeader({required this.semana});
 
   String _fmt(String iso) {
@@ -135,7 +142,7 @@ class _SemanaHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = semana.dias.fold<int>(0, (s, d) => s + d.suministros.length);
+    final total = semana.dias.fold<int>(0, (s, d) => s + d.ssts.length);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -150,9 +157,7 @@ class _SemanaHeader extends StatelessWidget {
             child: Text(
               '${_fmt(semana.desde)}  –  ${_fmt(semana.hasta)}',
               style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: Color(0xFF1A237E)),
+                  fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1A237E)),
             ),
           ),
           Container(
@@ -162,7 +167,7 @@ class _SemanaHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              '$total pendiente${total == 1 ? '' : 's'}',
+              '$total SST${total == 1 ? '' : 's'}',
               style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
           ),
@@ -200,7 +205,7 @@ class _DiaHeader extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text(
-          '$count suministro${count == 1 ? '' : 's'}',
+          '$count SST${count == 1 ? '' : 's'}',
           style: const TextStyle(fontSize: 12, color: Colors.black45),
         ),
       ],
@@ -208,49 +213,35 @@ class _DiaHeader extends StatelessWidget {
   }
 }
 
-// ── Tarjeta de suministro ─────────────────────────────────────────────────────
-class _SuministroCard extends StatelessWidget {
-  final SuministroSemana suministro;
-  final VoidCallback     onLiquidado;
-  const _SuministroCard({required this.suministro, required this.onLiquidado});
+// ── Tarjeta de SST ────────────────────────────────────────────────────────────
+class _SstCard extends StatelessWidget {
+  final SstPlanoResumen sst;
+  final VoidCallback    onTap;
+  const _SstCard({required this.sst, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final s            = suministro;
-    final tieneTipos   = s.tiposTrabajo.isNotEmpty;
-
+    final tienePlano = sst.tienePlano;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 1,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: tieneTipos
-            ? () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => LiquidarSuministroScreen(suministro: s),
-                  ),
-                );
-                onLiquidado();
-              }
-            : null,
+        onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor: tieneTipos
+                backgroundColor: tienePlano
                     ? const Color(0xFFE8EAF6)
                     : Colors.grey.shade100,
                 child: Icon(
-                  Icons.electrical_services_outlined,
-                  size: 20,
-                  color: tieneTipos
-                      ? const Color(0xFF1A237E)
-                      : Colors.grey,
+                  tienePlano ? Icons.edit_note : Icons.add,
+                  size: 22,
+                  color: tienePlano ? const Color(0xFF1A237E) : Colors.grey,
                 ),
               ),
               const SizedBox(width: 12),
@@ -259,55 +250,44 @@ class _SuministroCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      s.suministro,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
+                      'SST ${sst.sstCodigo}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
-                    if (s.sstCodigo.isNotEmpty)
-                      Text('SST ${s.sstCodigo}',
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.black45)),
-                    if (s.distrito.isNotEmpty)
-                      Text(s.distrito,
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.black54)),
-                    if (s.actividad.isNotEmpty)
+                    if (sst.distrito.isNotEmpty)
+                      Text(sst.distrito,
+                          style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                    if (sst.actividad.isNotEmpty)
                       Container(
                         margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.indigo.shade50,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          s.actividad,
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.indigo.shade700),
+                          sst.actividad,
+                          style: TextStyle(fontSize: 11, color: Colors.indigo.shade700),
                         ),
-                      ),
-                    if (s.horaInicio != null && s.horaFin != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Row(children: [
-                          const Icon(Icons.access_time,
-                              size: 11, color: Colors.black38),
-                          const SizedBox(width: 3),
-                          Text(
-                            '${s.horaInicio!.substring(0, 5)}  –  ${s.horaFin!.substring(0, 5)}',
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.black45),
-                          ),
-                        ]),
                       ),
                   ],
                 ),
               ),
-              if (tieneTipos)
-                const Icon(Icons.chevron_right, color: Colors.black38)
-              else
-                const Icon(Icons.info_outline,
-                    size: 18, color: Colors.orange),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: tienePlano ? Colors.green.shade50 : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  tienePlano ? 'Con plano' : 'Sin plano',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: tienePlano ? Colors.green.shade700 : Colors.orange.shade800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, color: Colors.black38),
             ],
           ),
         ),

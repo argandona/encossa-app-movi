@@ -3,13 +3,22 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../core/api_service.dart';
+import '../../core/auth_provider.dart';
 import '../../models/elemento_canvas.dart';
 import 'lienzo_widget.dart';
 import 'paleta_widget.dart';
 
 class DibujoScreen extends StatefulWidget {
-  const DibujoScreen({super.key});
+  /// Código del SST al que pertenece el plano. Si es null, el lienzo es libre
+  /// (no se carga ni se guarda en el servidor).
+  final String? sstCodigo;
+  /// Etiqueta del SST para mostrar en la barra (ej: "SST 12345").
+  final String? sstLabel;
+
+  const DibujoScreen({super.key, this.sstCodigo, this.sstLabel});
 
   @override
   State<DibujoScreen> createState() => _DibujoScreenState();
@@ -21,10 +30,77 @@ class _DibujoScreenState extends State<DibujoScreen> {
   String?                    _seleccionadoId;
   final GlobalKey            _repaintKey    = GlobalKey();
   bool                       _exportando    = false;
+  bool                       _cargando      = false;
+  bool                       _guardando     = false;
 
   // Valores base del elemento al inicio de cada gesto de escala/rotación
   double _gestEscalaBase   = 1.0;
   double _gestRotacionBase = 0.0;
+
+  bool get _ligadoASst => widget.sstCodigo != null && widget.sstCodigo!.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_ligadoASst) _cargarPlano();
+  }
+
+  Future<void> _cargarPlano() async {
+    setState(() => _cargando = true);
+    try {
+      final els = await ApiService().getPlano(widget.sstCodigo!);
+      if (!mounted) return;
+      setState(() {
+        _elementos
+          ..clear()
+          ..addAll(els);
+        _seleccionadoId = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo cargar el plano: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _guardarPlano() async {
+    if (!_ligadoASst) return;
+    final usuario = context.read<AuthProvider>().usuario!;
+    setState(() { _seleccionadoId = null; _guardando = true; });
+    try {
+      await ApiService().guardarPlano(
+        widget.sstCodigo!,
+        usuario.idUsuario,
+        _elementos,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Plano guardado.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -182,37 +258,69 @@ class _DibujoScreenState extends State<DibujoScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A237E),
         foregroundColor: Colors.white,
-        title: const Text('Dibujo'),
-      ),
-      body: Column(
-        children: [
-          // Barra de herramientas
-          _BarraHerramientas(
-            haySeleccion: haySeleccion,
-            exportando:   _exportando,
-            onEliminar:   _eliminarSeleccionado,
-            onFrente:     _traerAlFrente,
-            onAtras:      _enviarAtras,
-            onLimpiar:    _limpiar,
-            onExportar:   _exportando ? null : _exportar,
-          ),
-
-          // Lienzo
-          Expanded(
-            child: LienzoWidget(
-              elementos:       _elementos,
-              seleccionadoId:  _seleccionadoId,
-              repaintKey:      _repaintKey,
-              onSeleccionar:   _seleccionar,
-              onDeseleccionar: _deseleccionar,
-              onScaleStart:    _onScaleStart,
-              onScaleUpdate:   _onScaleUpdate,
-              onSoltar: (assetId, pos) => _agregar(assetId, posicion: pos),
+        title: Text(widget.sstLabel ?? 'Dibujo'),
+        actions: [
+          if (_ligadoASst)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: TextButton.icon(
+                onPressed: (_guardando || _cargando) ? null : _guardarPlano,
+                icon: _guardando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.save_outlined, size: 18, color: Colors.white),
+                label: Text(
+                  _guardando ? 'Guardando…' : 'Guardar',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
             ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              // Barra de herramientas
+              _BarraHerramientas(
+                haySeleccion: haySeleccion,
+                exportando:   _exportando,
+                onEliminar:   _eliminarSeleccionado,
+                onFrente:     _traerAlFrente,
+                onAtras:      _enviarAtras,
+                onLimpiar:    _limpiar,
+                onExportar:   _exportando ? null : _exportar,
+              ),
+
+              // Lienzo
+              Expanded(
+                child: LienzoWidget(
+                  elementos:       _elementos,
+                  seleccionadoId:  _seleccionadoId,
+                  repaintKey:      _repaintKey,
+                  onSeleccionar:   _seleccionar,
+                  onDeseleccionar: _deseleccionar,
+                  onScaleStart:    _onScaleStart,
+                  onScaleUpdate:   _onScaleUpdate,
+                  onSoltar: (assetId, pos) => _agregar(assetId, posicion: pos),
+                ),
+              ),
+
+              // Paleta de elementos
+              PaletaWidget(onTap: _agregar),
+            ],
           ),
 
-          // Paleta de elementos
-          PaletaWidget(onTap: _agregar),
+          // Overlay de carga inicial del plano
+          if (_cargando)
+            Container(
+              color: Colors.black26,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
         ],
       ),
     );

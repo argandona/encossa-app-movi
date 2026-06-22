@@ -5,14 +5,9 @@ import '../../core/auth_provider.dart';
 import '../../models/sst.dart';
 
 class LiquidarSuministroScreen extends StatefulWidget {
-  final SuministroSst suministro;
-  final Sst           sst;
+  final SuministroSemana suministro;
 
-  const LiquidarSuministroScreen({
-    super.key,
-    required this.suministro,
-    required this.sst,
-  });
+  const LiquidarSuministroScreen({super.key, required this.suministro});
 
   @override
   State<LiquidarSuministroScreen> createState() =>
@@ -20,50 +15,26 @@ class LiquidarSuministroScreen extends StatefulWidget {
 }
 
 class _LiquidarSuministroScreenState extends State<LiquidarSuministroScreen> {
-  List<TipoTrabajoConPartidas> _tipos     = [];
-  bool    _cargando   = true;
-  String? _errorCarga;
-
   TipoTrabajoConPartidas? _tipoSeleccionado;
 
-  // controllers por id_mano_de_obra
   final Map<int, TextEditingController> _moControllers  = {};
-  // controllers por id_material
   final Map<int, TextEditingController> _matControllers = {};
+  final TextEditingController _obsController    = TextEditingController();
+  final TextEditingController _motivoController = TextEditingController();
 
-  final TextEditingController _obsController = TextEditingController();
+  // Estado a registrar: 'EJECUTADO' (MO + materiales) o 'DEVUELTO' (solo MO)
+  String _estado = 'EJECUTADO';
+  bool get _esDevuelto => _estado == 'DEVUELTO';
+
   bool _guardando = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
 
   @override
   void dispose() {
     for (final c in _moControllers.values)  c.dispose();
     for (final c in _matControllers.values) c.dispose();
     _obsController.dispose();
+    _motivoController.dispose();
     super.dispose();
-  }
-
-  Future<void> _cargar() async {
-    setState(() { _cargando = true; _errorCarga = null; });
-    try {
-      final tipos = await ApiService().getTiposTrabajoSuministro(widget.suministro.idSuministro);
-      if (mounted) {
-        setState(() {
-          _tipos    = tipos;
-          _cargando = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() {
-        _errorCarga = e is ApiException ? e.message : 'Error de conexión: $e';
-        _cargando   = false;
-      });
-    }
   }
 
   void _onTipoChanged(TipoTrabajoConPartidas? tipo) {
@@ -109,25 +80,42 @@ class _LiquidarSuministroScreenState extends State<LiquidarSuministroScreen> {
       return;
     }
 
+    // Los materiales solo se liquidan si el suministro fue EJECUTADO.
     final materiales = <Map<String, dynamic>>[];
-    for (final m in _tipoSeleccionado!.materiales) {
-      final texto    = _matControllers[m.idMaterial]?.text.trim() ?? '';
-      if (texto.isEmpty) continue;
-      final cantidad = double.tryParse(texto.replaceAll(',', '.'));
-      if (cantidad == null || cantidad <= 0) continue;
-      materiales.add({'material': m.idMaterial, 'cantidad': cantidad});
+    if (!_esDevuelto) {
+      for (final m in _tipoSeleccionado!.materiales) {
+        final texto    = _matControllers[m.idMaterial]?.text.trim() ?? '';
+        if (texto.isEmpty) continue;
+        final cantidad = double.tryParse(texto.replaceAll(',', '.'));
+        if (cantidad == null || cantidad <= 0) continue;
+        materiales.add({'material': m.idMaterial, 'cantidad': cantidad});
+      }
+    }
+
+    // Si es DEVUELTO, el motivo es obligatorio (se guarda en Render).
+    final motivo = _motivoController.text.trim();
+    if (_esDevuelto && motivo.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Ingresa el motivo de la devolución.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
     }
 
     setState(() => _guardando = true);
     try {
       final usuario = context.read<AuthProvider>().usuario!;
       await ApiService().crearLiquidacion(
-        suministroId:  widget.suministro.idSuministro,
-        usuarioId:     usuario.idUsuario,
-        tipoTrabajoId: _tipoSeleccionado!.idTipoTrabajo,
-        observacion:   _obsController.text.trim(),
-        partidas:      partidas,
-        materiales:    materiales,
+        suministroExterno:  widget.suministro.suministro,
+        sstExterno:         widget.suministro.sstCodigo,
+        usuarioId:          usuario.idUsuario,
+        tipoTrabajoId:      _tipoSeleccionado!.idTipoTrabajo,
+        observacion:        _obsController.text.trim(),
+        partidas:           partidas,
+        materiales:         materiales,
+        estadoSuministro:   _estado,
+        motivo:             motivo,
+        suministroRenderId: widget.suministro.idExterno,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -149,7 +137,9 @@ class _LiquidarSuministroScreenState extends State<LiquidarSuministroScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.suministro;
+    final s    = widget.suministro;
+    final tipos = s.tiposTrabajo;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A237E),
@@ -157,159 +147,186 @@ class _LiquidarSuministroScreenState extends State<LiquidarSuministroScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Liquidar ${s.numeroSuministro}',
+            Text('Liquidar ${s.suministro}',
                 style: const TextStyle(fontSize: 16)),
             Text(
-              s.medidor.isNotEmpty ? 'Medidor: ${s.medidor}' : s.distrito,
+              s.sstCodigo.isNotEmpty ? 'SST ${s.sstCodigo}' : s.distrito,
               style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
         ),
       ),
-      body: _cargando
-          ? const Center(child: CircularProgressIndicator())
-          : _errorCarga != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                        const SizedBox(height: 12),
-                        Text(_errorCarga!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                            onPressed: _cargar,
-                            child: const Text('Reintentar')),
-                      ],
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // ── Info suministro ────────────────────────────────────────
+                _InfoCard(suministro: s),
+                const SizedBox(height: 16),
+
+                // ── Selector tipo de trabajo ───────────────────────────────
+                _seccion('Tipo de trabajo'),
+                const SizedBox(height: 8),
+                if (tipos.isEmpty)
+                  const Text(
+                    'No hay tipos de trabajo configurados para esta actividad.',
+                    style: TextStyle(color: Colors.black45),
+                  )
+                else
+                  DropdownButtonFormField<TipoTrabajoConPartidas>(
+                    value: _tipoSeleccionado,
+                    hint: const Text('Selecciona un tipo de trabajo'),
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
                     ),
+                    items: tipos
+                        .map((t) => DropdownMenuItem(
+                              value: t,
+                              child: Text(t.nombre),
+                            ))
+                        .toList(),
+                    onChanged: _onTipoChanged,
                   ),
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          // ── Info suministro ──────────────────────────────
-                          _InfoCard(suministro: s, sst: widget.sst),
-                          const SizedBox(height: 16),
 
-                          // ── Selector tipo de trabajo ─────────────────────
-                          _seccion('Tipo de trabajo'),
-                          const SizedBox(height: 8),
-                          if (_tipos.isEmpty)
-                            const Text(
-                              'No hay tipos de trabajo configurados.',
-                              style: TextStyle(color: Colors.black45),
-                            )
-                          else
-                            DropdownButtonFormField<TipoTrabajoConPartidas>(
-                              value: _tipoSeleccionado,
-                              hint: const Text('Selecciona un tipo de trabajo'),
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10)),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                              ),
-                              items: _tipos
-                                  .map((t) => DropdownMenuItem(
-                                        value: t,
-                                        child: Text(t.nombre),
-                                      ))
-                                  .toList(),
-                              onChanged: _onTipoChanged,
-                            ),
-
-                          // ── Partidas de mano de obra ─────────────────────
-                          if (_tipoSeleccionado != null) ...[
-                            const SizedBox(height: 20),
-                            _seccion('Mano de obra'),
-                            const SizedBox(height: 8),
-                            if (_tipoSeleccionado!.partidas.isEmpty)
-                              const Text(
-                                'Este tipo de trabajo no tiene partidas configuradas.',
-                                style: TextStyle(color: Colors.black45),
-                              )
-                            else
-                              ...(_tipoSeleccionado!.partidas.map((p) => _PartidaRow(
-                                    partida:     p.partida,
-                                    descripcion: p.descripcion,
-                                    precio:      p.precio,
-                                    controller:  _moControllers[p.idManoDeObra]!,
-                                  ))),
-
-                            // ── Materiales ───────────────────────────────────
-                            const SizedBox(height: 20),
-                            _seccion('Material'),
-                            const SizedBox(height: 8),
-                            if (_tipoSeleccionado!.materiales.isEmpty)
-                              const Text(
-                                'Este tipo de trabajo no tiene materiales configurados.',
-                                style: TextStyle(color: Colors.black45),
-                              )
-                            else
-                              ...(_tipoSeleccionado!.materiales.map((m) => _MaterialRow(
-                                    matricula:   m.matricula,
-                                    descripcion: m.descripcion,
-                                    controller:  _matControllers[m.idMaterial]!,
-                                  ))),
-                          ],
-
-                          // ── Observación ──────────────────────────────────
-                          const SizedBox(height: 20),
-                          _seccion('Observación'),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _obsController,
-                            maxLines: 3,
-                            decoration: InputDecoration(
-                              hintText: 'Opcional...',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10)),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                            ),
-                          ),
-                          const SizedBox(height: 80),
-                        ],
-                      ),
-                    ),
-
-                    // ── Botón guardar ────────────────────────────────────────
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton.icon(
-                            onPressed: _guardando ? null : _guardar,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1A237E),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                            icon: _guardando
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2))
-                                : const Icon(Icons.save_outlined),
-                            label: Text(_guardando
-                                ? 'Guardando...'
-                                : 'Registrar liquidación'),
-                          ),
+                // ── Estado del suministro ──────────────────────────────────
+                if (_tipoSeleccionado != null) ...[
+                  const SizedBox(height: 20),
+                  _seccion('Estado del suministro'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ChipEstado(
+                          valor:        'EJECUTADO',
+                          color:        Colors.green.shade700,
+                          icon:         Icons.check_circle_outline,
+                          seleccionado: !_esDevuelto,
+                          onTap: () => setState(() => _estado = 'EJECUTADO'),
                         ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ChipEstado(
+                          valor:        'DEVUELTO',
+                          color:        Colors.red.shade700,
+                          icon:         Icons.assignment_return_outlined,
+                          seleccionado: _esDevuelto,
+                          onTap: () => setState(() => _estado = 'DEVUELTO'),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // ── Motivo (solo si DEVUELTO, obligatorio) ─────────────────
+                  if (_esDevuelto) ...[
+                    const SizedBox(height: 16),
+                    _seccion('Motivo de la devolución *'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _motivoController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: '¿Por qué se devuelve el suministro?',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        filled: true,
+                        fillColor: Colors.red.shade50,
                       ),
                     ),
                   ],
+
+                  // ── Partidas de mano de obra ───────────────────────────────
+                  const SizedBox(height: 20),
+                  _seccion('Mano de obra'),
+                  const SizedBox(height: 8),
+                  if (_tipoSeleccionado!.partidas.isEmpty)
+                    const Text(
+                      'Este tipo de trabajo no tiene partidas configuradas.',
+                      style: TextStyle(color: Colors.black45),
+                    )
+                  else
+                    ...(_tipoSeleccionado!.partidas.map((p) => _PartidaRow(
+                          partida:     p.partida,
+                          descripcion: p.descripcion,
+                          precio:      p.precio,
+                          controller:  _moControllers[p.idManoDeObra]!,
+                        ))),
+
+                  // ── Materiales (solo si EJECUTADO) ─────────────────────────
+                  if (!_esDevuelto) ...[
+                    const SizedBox(height: 20),
+                    _seccion('Material'),
+                    const SizedBox(height: 8),
+                    if (_tipoSeleccionado!.materiales.isEmpty)
+                      const Text(
+                        'Este tipo de trabajo no tiene materiales configurados.',
+                        style: TextStyle(color: Colors.black45),
+                      )
+                    else
+                      ...(_tipoSeleccionado!.materiales.map((m) => _MaterialRow(
+                            matricula:   m.matricula,
+                            descripcion: m.descripcion,
+                            controller:  _matControllers[m.idMaterial]!,
+                          ))),
+                  ],
+                ],
+
+                // ── Observación ────────────────────────────────────────────
+                const SizedBox(height: 20),
+                _seccion('Observación'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _obsController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Opcional...',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
                 ),
+                const SizedBox(height: 80),
+              ],
+            ),
+          ),
+
+          // ── Botón guardar ──────────────────────────────────────────────────
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: _guardando ? null : _guardar,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A237E),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: _guardando
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.save_outlined),
+                  label: Text(
+                      _guardando ? 'Guardando...' : 'Registrar liquidación'),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -325,9 +342,8 @@ class _LiquidarSuministroScreenState extends State<LiquidarSuministroScreen> {
 
 // ── Tarjeta info suministro ───────────────────────────────────────────────────
 class _InfoCard extends StatelessWidget {
-  final SuministroSst suministro;
-  final Sst           sst;
-  const _InfoCard({required this.suministro, required this.sst});
+  final SuministroSemana suministro;
+  const _InfoCard({required this.suministro});
 
   @override
   Widget build(BuildContext context) {
@@ -345,30 +361,56 @@ class _InfoCard extends StatelessWidget {
             const Icon(Icons.electrical_services_outlined,
                 color: Color(0xFF1A237E), size: 18),
             const SizedBox(width: 8),
-            Text(s.numeroSuministro,
+            Text(s.suministro,
                 style: const TextStyle(
                     fontWeight: FontWeight.bold, fontSize: 15)),
           ]),
-          if (s.medidor.isNotEmpty)
+          if (s.sstCodigo.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('Medidor: ${s.medidor}',
-                  style: const TextStyle(fontSize: 13)),
+              child: Text('SST ${s.sstCodigo}',
+                  style: const TextStyle(fontSize: 13, color: Colors.black54)),
             ),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '${sst.sst.isNotEmpty ? "SST ${sst.sst}" : sst.codigo}  •  ${s.distrito.isNotEmpty ? s.distrito : sst.distrito}',
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
+          if (s.distrito.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(s.distrito,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54)),
             ),
-          ),
+          if (s.actividad.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade100,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(s.actividad,
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.indigo.shade800)),
+              ),
+            ),
+          if (s.horaInicio != null && s.horaFin != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(children: [
+                const Icon(Icons.access_time, size: 13, color: Colors.black45),
+                const SizedBox(width: 4),
+                Text(
+                  '${s.horaInicio!.substring(0, 5)}  –  ${s.horaFin!.substring(0, 5)}',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ]),
+            ),
         ],
       ),
     );
   }
 }
 
-// ── Fila de partida de mano de obra ──────────────────────────────────────────
+// ── Fila de partida ───────────────────────────────────────────────────────────
 class _PartidaRow extends StatelessWidget {
   final String                partida;
   final String                descripcion;
@@ -402,11 +444,11 @@ class _PartidaRow extends StatelessWidget {
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13)),
                 Text(descripcion,
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.black54)),
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.black54)),
                 Text('S/ $precio c/u',
-                    style: const TextStyle(
-                        fontSize: 11, color: Colors.black38)),
+                    style:
+                        const TextStyle(fontSize: 11, color: Colors.black38)),
               ],
             ),
           ),
@@ -466,8 +508,8 @@ class _MaterialRow extends StatelessWidget {
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13)),
                 Text(descripcion,
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.black54)),
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.black54)),
               ],
             ),
           ),
@@ -490,6 +532,56 @@ class _MaterialRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Botón de estado (EJECUTADO / DEVUELTO) ────────────────────────────────────
+class _ChipEstado extends StatelessWidget {
+  final String   valor;
+  final Color    color;
+  final IconData icon;
+  final bool     seleccionado;
+  final VoidCallback onTap;
+
+  const _ChipEstado({
+    required this.valor,
+    required this.color,
+    required this.icon,
+    required this.seleccionado,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: seleccionado ? color.withOpacity(0.12) : Colors.grey.shade50,
+          border: Border.all(
+            color: seleccionado ? color : Colors.grey.shade300,
+            width: seleccionado ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: seleccionado ? color : Colors.black38),
+            const SizedBox(height: 4),
+            Text(
+              valor,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: seleccionado ? color : Colors.black54,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
