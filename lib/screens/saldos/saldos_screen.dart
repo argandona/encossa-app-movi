@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_service.dart';
 import '../../core/auth_provider.dart';
+import '../../core/num_utils.dart';
 
 class SaldosScreen extends StatefulWidget {
   final bool soloMios; // true = encargado/capataz, false = enc. almacén
@@ -28,16 +29,18 @@ class _SaldosScreenState extends State<SaldosScreen> {
       _camiones = await ApiService().getStockPorCamion(
         usuarioId: widget.soloMios ? usuario.idUsuario : null,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error al cargar saldos: $e');
+    }
     setState(() => _loading = false);
   }
 
-  int _totalItems(Map<String, dynamic> camion) {
+  num _totalItems(Map<String, dynamic> camion) {
     final items = camion['items'] as List? ?? [];
     // Para la vista del encargado el backend ya filtra cantidad>0, suma directa.
     // Para enc. almacén puede haber negativos; contamos solo los positivos.
-    return items.fold<int>(
-        0, (sum, i) => sum + ((i['cantidad'] as int? ?? 0).clamp(0, 999999)));
+    return items.fold<num>(
+        0, (sum, i) => sum + numFrom(i['cantidad']).clamp(0, 999999));
   }
 
   @override
@@ -82,7 +85,7 @@ class _SaldosScreenState extends State<SaldosScreen> {
 
 class _CamionCard extends StatelessWidget {
   final Map<String, dynamic> camion;
-  final int   totalUnd;
+  final num   totalUnd;
   final bool  mostrarUsuario;
 
   const _CamionCard({
@@ -117,7 +120,7 @@ class _CamionCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 12),
               ),
             Text(
-              '${items.length} material${items.length != 1 ? 'es' : ''} • $totalUnd unidades totales',
+              '${items.length} material${items.length != 1 ? 'es' : ''} • ${fmtCant(totalUnd)} unidades totales',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ],
@@ -134,7 +137,7 @@ class _CamionCard extends StatelessWidget {
           ]),
           const SizedBox(height: 4),
           ...items.map((item) {
-            final int cantidad = item['cantidad'] as int? ?? 0;
+            final num cantidad = numFrom(item['cantidad']);
             final bool negativo = cantidad < 0;
             // El encargado (soloMios) nunca recibe negativos (backend los filtra).
             // Solo el enc. almacén ve negativos → mostrar aviso de reposición.
@@ -158,7 +161,7 @@ class _CamionCard extends StatelessWidget {
                           ),
                         ),
                         child: Text(
-                          negativo ? '${cantidad} ⚠' : '$cantidad',
+                          negativo ? '${fmtCant(cantidad)} ⚠' : fmtCant(cantidad),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,

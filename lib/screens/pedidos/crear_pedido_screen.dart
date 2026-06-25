@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_service.dart';
 import '../../core/auth_provider.dart';
+import '../../core/num_utils.dart';
 
 class CrearPedidoScreen extends StatefulWidget {
   const CrearPedidoScreen({super.key});
@@ -250,7 +251,7 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen> {
                           itemCount: _items.length,
                           itemBuilder: (ctx, i) {
                             final mat = _items[i]['material'] as Map<String, dynamic>;
-                            final qty = _items[i]['cantidad'] as int;
+                            final qty = intFrom(_items[i]['cantidad']);
                             return Card(
                               child: ListTile(
                                 title: Text(mat['descripcion']),

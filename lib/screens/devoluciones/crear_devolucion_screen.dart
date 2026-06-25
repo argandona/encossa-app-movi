@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_service.dart';
 import '../../core/auth_provider.dart';
+import '../../core/num_utils.dart';
 
 class CrearDevolucionScreen extends StatefulWidget {
   const CrearDevolucionScreen({super.key});
@@ -46,7 +47,7 @@ class _CrearDevolucionScreenState extends State<CrearDevolucionScreen> {
       // Solo camiones que tienen al menos un ítem con stock > 0
       final conStock = data.where((c) {
         final items = (c['items'] as List? ?? []);
-        return items.any((i) => (i['cantidad'] as int? ?? 0) > 0);
+        return items.any((i) => numFrom(i['cantidad']) > 0);
       }).toList();
 
       setState(() {
@@ -67,8 +68,8 @@ class _CrearDevolucionScreenState extends State<CrearDevolucionScreen> {
     final lista = ((_camionSel!['items'] as List?) ?? [])
         .cast<Map<String, dynamic>>()
         .where((i) {
-          final total     = i['cantidad'] as int? ?? 0;
-          final pendiente = i['pendiente_devolucion'] as int? ?? 0;
+          final total     = intFrom(i['cantidad']);
+          final pendiente = intFrom(i['pendiente_devolucion']);
           return (total - pendiente) > 0;
         })
         .toList();
@@ -80,13 +81,13 @@ class _CrearDevolucionScreenState extends State<CrearDevolucionScreen> {
   // Cantidad ya agregada en la lista de items para un material
   int _cantidadAgregada(int materialId) {
     final found = _items.where((e) => e['material_id'] == materialId);
-    return found.isEmpty ? 0 : (found.first['cantidad'] as int);
+    return found.isEmpty ? 0 : intFrom(found.first['cantidad']);
   }
 
   // Disponible = stock - devoluciones pendientes previas - lo ya agregado en esta sesión
   int _stockDisponible(Map<String, dynamic> stockItem) {
-    final total     = stockItem['cantidad'] as int? ?? 0;
-    final pendiente = stockItem['pendiente_devolucion'] as int? ?? 0;
+    final total     = intFrom(stockItem['cantidad']);
+    final pendiente = intFrom(stockItem['pendiente_devolucion']);
     final agregado  = _cantidadAgregada(stockItem['material_id'] as int);
     return total - pendiente - agregado;
   }
@@ -314,8 +315,8 @@ class _CrearDevolucionScreenState extends State<CrearDevolucionScreen> {
                                   const Divider(height: 1, indent: 56),
                               itemBuilder: (_, i) {
                                 final item       = _stockCamion[i];
-                                final stock      = item['cantidad'] as int? ?? 0;
-                                final pendiente  = item['pendiente_devolucion'] as int? ?? 0;
+                                final stock      = intFrom(item['cantidad']);
+                                final pendiente  = intFrom(item['pendiente_devolucion']);
                                 final agregado   = _cantidadAgregada(item['material_id'] as int);
                                 final disponible = stock - pendiente - agregado;
 
